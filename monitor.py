@@ -6,16 +6,27 @@ import json
 import os
 import threading
 import atexit
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
+
+LOG_FILE = "monitor.log"
+
+def log_event(site, status, reason=None):
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if reason:
+        line = f"[{now}] {status} | {site} | {reason}\n"
+    else:
+        line = f"[{now}] {status} | {site}\n"
+    with open(LOG_FILE, "a") as f:
+        f.write(line)
 
 # ── Configuratie ──────────────────────────────────────
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID        = os.getenv("CHAT_ID")
 INTERVAL       = 60
 SITES_FILE     = "sites.json"
+DOWN_SITES     = set()
 OFFSET         = 0
 # ──────────────────────────────────────────────────────
 
@@ -75,13 +86,22 @@ def monitor_loop():
         for site in sites:
             status, reason = check_site(site)
             if status == "UP":
+                if site in DOWN_SITES:
+                    send_telegram(f"✅ RECOVERED [{now}]\n{site} este din nou UP!")
+                    DOWN_SITES.discard(site)
                 print(f"  ✅ {site}")
+                log_event(site, "UP")
             elif status == "BLOCKED":
                 print(f"  ⚠️ {site} — {reason}")
+                log_event(site, "BLOCKED", reason)
             else:
-                msg = f"🚨 ALERT [{now}]\n{site}\nStatus: DOWN\nMotiv: {reason}"
+                if site not in DOWN_SITES:
+                    msg = f"🚨 ALERT [{now}]\n{site}\nStatus: DOWN\nMotiv: {reason}"
+                    send_telegram(msg)
+                    DOWN_SITES.add(site)
                 print(f"  ❌ {site} — {reason}")
-                send_telegram(msg)
+                log_event(site, "DOWN", reason)
+                # log_event(site, "UP")
         time.sleep(INTERVAL)
 
 # ── Thread 2: Asculta comenzi Telegram ───────────────
@@ -139,7 +159,20 @@ def telegram_loop():
                             msg += f"\n   ↳ {reason}"
                         msg += "\n"
                     send_telegram(msg)
-
+                
+                elif text == "/history":
+                    if os.path.exists(LOG_FILE):
+                        with open(LOG_FILE, "r") as f:
+                            lines = f.readlines()
+                        if lines:
+                            last = lines[-10:] if len(lines) >= 10 else lines
+                            msg = "📜 Ultimele evenimente:\n\n" + "".join(last)
+                        else:
+                            msg = "📜 Logul e gol."
+                    else:
+                        msg = "📜 Nu există log încă."
+                    send_telegram(msg)
+                    
                 elif text == "/help":
                     send_telegram(
                         "🤖 DevOps Monitor — Comenzi:\n\n"
@@ -147,7 +180,8 @@ def telegram_loop():
                         "/remove https://site.com — sterge site\n"
                         "/list — vezi toate site-urile\n"
                         "/status — verifica acum\n"
-                        "/help — aceasta lista"
+                        "/help — aceasta lista\n"
+                        "/history — ultimele 10 evenimente\n"
                     )
 
         except Exception as e:

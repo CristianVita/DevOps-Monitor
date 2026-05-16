@@ -24,7 +24,8 @@ A lightweight site monitoring tool with real-time Telegram alerts.
 
 1. Clone the repository -> git clone https://github.com/CristianVita/DevOps-Monitor.git
 2. Install dependencies -> pip install python-dotenv
-3. Create your `.env` file -> cp .env.example .env; Then edit `.env` with your Telegram token and chat ID.
+3. Create your `.env` file based on the example: cp .env.example .env
+   Then edit `.env` and fill in your Telegram token and chat ID.
 4. Run -> python monitor.py
 
 
